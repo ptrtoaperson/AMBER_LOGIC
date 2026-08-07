@@ -1,0 +1,2 @@
+[console_scripts]
+AMBER_CONTROLLER = AMBER_CONTROLLER.cli:main
