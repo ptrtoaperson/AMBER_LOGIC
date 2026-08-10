@@ -4,8 +4,8 @@ DEVICE = STM32F103xE
 CPU = cortex-m3
 
 # Directories
-SRCDIR = src drivers common/src/dev  wizchip
-INCDIR = include
+SRCDIR = src drivers common/src/dev  wizchip/ cJSON/
+INCDIR = include 
 BINDIR = bin
 OBJDIR = obj
 
@@ -18,6 +18,7 @@ COM_DIR = src \
           common/cmsis/Include \
           common/cmsis/Device/ST/STM32F1xx/Include \
           wizchip \
+	  cJSON\
           third_party/stm32f1xx-hal-driver/Inc \
           uip/uip
 
@@ -56,10 +57,10 @@ SIZE = arm-none-eabi-size
 OBJDUMP = arm-none-eabi-objdump
 
 # Flags
-CCOMMONFLAGS = -Wall -Os -fno-common -fno-keep-inline-functions -mthumb -mcpu=$(CPU) --specs=nosys.specs --specs=nano.specs -g
+CCOMMONFLAGS = -Wall -Os -fno-common -fno-keep-inline-functions -mthumb -mcpu=$(CPU) --specs=nosys.specs -g
 GCFLAGS = -std=c11 $(CCOMMONFLAGS) $(INCLUDE) $(DEFINE)
-LDFLAGS = -T$(LSCRIPT) -mthumb -mcpu=$(CPU) --specs=nosys.specs --specs=nano.specs \
-          -Wl,-Map,$(BINDIR)/$(PROJECT).map -Wl,--gc-sections
+LDFLAGS = -T$(LSCRIPT) -mthumb -mcpu=$(CPU) --specs=nosys.specs \
+	  -Wl,-Map,$(BINDIR)/$(PROJECT).map -Wl,--gc-sections
 
 # Search paths for source files
 vpath %.c $(SRCDIR)
@@ -68,7 +69,8 @@ vpath %.s src
 ## Build Rules
 
 all: $(BINDIR)/$(PROJECT).bin $(BINDIR)/$(PROJECT).hex
-
+	@echo "\033[0;31mspecs FLAG NOT SET for debugging. set --specs=nano.specs for production\0m" 
+	@echo "\033[03m"
 $(BINDIR)/$(PROJECT).elf: $(objs_comp)
 	@mkdir -p $(dir $@)
 	@echo "=== Linking $@ ==="
@@ -104,6 +106,7 @@ clean:
 
 flash: all
 	openocd -f interface/cmsis-dap.cfg -f target/stm32f1x.cfg -c "program $(BINDIR)/$(PROJECT).bin 0x08000000 verify reset exit"
+
 
 reset:
 	openocd -f interface/cmsis-dap.cfg -f target/stm32f1x.cfg -c "adapter_khz 1000" -c "reset_config srst_only" -c "init; reset run; exit"
