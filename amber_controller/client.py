@@ -1,7 +1,7 @@
 import socket
 import struct
 from pathlib import Path
-from typing import Iterable, Optional, Sequence
+from typing import Iterable, Optional, Sequence, Union
 
 try:
     import serial  # type: ignore[import-not-found]
@@ -49,29 +49,34 @@ MUX_MAX = 4
 TCP_PORT_MIN = 1
 TCP_PORT_MAX = 65535
 
+MATRIX_PAIRS_INST = 11
+MATRIX_PAIRS_FLAG_CLEAR_BETWEEN = 0x01
+MATRIX_PAIRS_FLAG_CLEAR_AT_END = 0x02
+
 
 _total_buffer = b""
 _transport_handle = None
 
 
-def _matrix_pairs_to_masks(row_col_pairs):
-    row_mask = 0
-    col_mask = 0
-    used_cols = set()
-
+def _normalize_matrix_pairs(row_col_pairs):
+    normalized = []
     for row, col in row_col_pairs:
         r = int(row)
         c = int(col)
         _validate_matrix_pair(r, c)
+        normalized.append((r, c))
+    return normalized
 
-        if c in used_cols:
-            raise ValueError(f"duplicate column assignment is not allowed: col {c}")
 
-        used_cols.add(c)
-
-        row_mask |= (1 << (r - 1))
-        col_mask |= (1 << (c - 1))
-    return row_mask, col_mask
+def _validate_column_row_mapping(pairs):
+    col_to_row = {}
+    for r, c in pairs:
+        mapped_row = col_to_row.get(c)
+        if mapped_row is not None and mapped_row != r:
+            raise ValueError(
+                f"invalid matrix mapping: column {c} is assigned to both row {mapped_row} and row {r}"
+            )
+        col_to_row[c] = r
 
 __all__ = [
     "controller",
@@ -197,18 +202,61 @@ class controller:
         self._transport_handle.close()
         self._transport_handle = None
 
-    def set_voltage(self, channel: int, voltage: float) -> None:
-        _validate_channel(channel)
-        self._buffer += struct.pack("<B B H", 1, int(channel), code(float(voltage)))
+    def set_voltage(
+        self,
+        channel: Union[int, Iterable[Sequence[float]]],
+        voltage: Optional[float] = None,
+    ) -> None:
+        if voltage is None:
+            try:
+                pairs = list(channel)  # type: ignore[arg-type]
+            except TypeError as exc:
+                raise TypeError(
+                    "set_voltage expects either (channel, voltage) or an iterable of (channel, voltage) pairs"
+                ) from exc
+
+            for pair in pairs:
+                if len(pair) != 2:
+                    raise ValueError(f"invalid voltage pair {pair!r}: expected (channel, voltage)")
+
+                ch = int(pair[0])
+                volt = float(pair[1])
+                _validate_channel(ch)
+                self._buffer += struct.pack("<B B H", 1, ch, code(volt))
+
+            self._auto_send_if_enabled()
+            return
+
+        ch = int(channel)
+        _validate_channel(ch)
+        self._buffer += struct.pack("<B B H", 1, ch, code(float(voltage)))
         self._auto_send_if_enabled()
 
-    def config_matrix_masks(self, row_mask: int, col_mask: int) -> None:
-        self._buffer += struct.pack("<BHH", 8, int(row_mask) & 0xFFFF, int(col_mask) & 0xFFFF)
-        self._auto_send_if_enabled()
+    def config_matrix(
+        self,
+        row_col_pairs: Iterable[Sequence[int]],
+        *,
+        clear_between: bool = False,
+        clear_at_end: bool = False,
+    ) -> None:
+        pairs = _normalize_matrix_pairs(row_col_pairs)
+        _validate_column_row_mapping(pairs)
 
-    def config_matrix(self, row_col_pairs: Iterable[Sequence[int]]) -> None:
-        row_mask, col_mask = _matrix_pairs_to_masks(row_col_pairs)
-        self.config_matrix_masks(row_mask, col_mask)
+        if len(pairs) > 9:
+            raise ValueError(f"too many matrix pairs: {len(pairs)} (max 9)")
+
+        flags = 0
+        if clear_between:
+            flags |= MATRIX_PAIRS_FLAG_CLEAR_BETWEEN
+        if clear_at_end:
+            flags |= MATRIX_PAIRS_FLAG_CLEAR_AT_END
+
+        payload = bytearray(struct.pack("<BBB", MATRIX_PAIRS_INST, flags, len(pairs)))
+        for r, c in pairs:
+            payload += struct.pack("<BB", r, c)
+
+        self._buffer += bytes(payload)
+        self._auto_send_if_enabled()
 
     def set_mux(self, mux_id: int) -> None:
         _validate_mux(int(mux_id))
@@ -292,38 +340,11 @@ def _validate_channel(channel):
         raise ValueError(f"channel must be {LOGICAL_CHANNEL_MIN}-{LOGICAL_CHANNEL_MAX}, got {channel}")
 
 
-def _validate_tgp(tgp_id):
-    if tgp_id < TGP_MIN or tgp_id > TGP_MAX:
-        raise ValueError(f"tgp_id must be {TGP_MIN}-{TGP_MAX}, got {tgp_id}")
-
-
-def _validate_pwm(channel, tgp_id, freq):
-    _validate_channel(channel)
-    _validate_tgp(tgp_id)
-    if freq <= 0.0:
-        raise ValueError(f"freq must be > 0, got {freq}")
-
-
 def _validate_ltc2688_channel(channel):
     if channel < LTC2688_LOGICAL_MIN or channel > LTC2688_LOGICAL_MAX:
         raise ValueError(
             f"LTC2688 logical channel must be {LTC2688_LOGICAL_MIN}-{LTC2688_LOGICAL_MAX}, got {channel}"
         )
-
-
-def _validate_trig_channel(trig_id):
-    if trig_id < TRIG_MIN or trig_id > TRIG_MAX:
-        raise ValueError(f"trig_id must be {TRIG_MIN} or {TRIG_MAX}, got {trig_id}")
-
-
-def _validate_trig_voltage(v_trig):
-    if v_trig < TRIG_V_MIN or v_trig > TRIG_V_MAX:
-        raise ValueError(f"trigger voltage must be in [{TRIG_V_MIN}, {TRIG_V_MAX}], got {v_trig}")
-
-
-def _validate_sequence_trigger_pin(trigger_pin):
-    if trigger_pin < SEQ_TRIG_MIN or trigger_pin > SEQ_TRIG_MAX:
-        raise ValueError(f"trigger_pin must be {SEQ_TRIG_MIN}-{SEQ_TRIG_MAX}, got {trigger_pin}")
 
 
 def _validate_matrix_pair(row, col):
@@ -377,48 +398,8 @@ def code(volt):
     return code_val
 
 
-def start_PWM(channel, id, low, high, freq):
-    raise NotImplementedError("PWM/toggle commands are disabled in DAC+matrix+mux profile")
 
 
-def stop_PWM(channel, id):
-    raise NotImplementedError("PWM/toggle commands are disabled in DAC+matrix+mux profile")
-
-
-def start_ltc2688_pwm(channel, tgp_id, low, high, freq):
-    """Start hardware PWM on LTC2688 logical channel (0-15)."""
-    _validate_ltc2688_channel(channel)
-    start_PWM(channel=channel, id=tgp_id, low=low, high=high, freq=freq)
-
-
-def assign_ltc2688_pwm(assignments):
-    """Bulk-assign PWM for LTC2688 channels.
-
-    Each item in assignments must be:
-    (channel_0_to_15, tgp_id_0_to_2, low_volt, high_volt, freq_hz)
-    """
-    for channel, tgp_id, low, high, freq in assignments:
-        start_ltc2688_pwm(channel, tgp_id, low, high, freq)
-
-
-def send_voltage_sequence(dac_channel, trigger_pin, edge, voltages):
-    raise NotImplementedError("Triggered sequence commands are disabled in DAC+matrix+mux profile")
-
-
-def send_soft_sequence(dac_channel, delay_ms, voltages):
-    raise NotImplementedError("Software sequence commands are disabled in DAC+matrix+mux profile")
-
-
-def set_trigger_level(trig_id, v_trig):
-    raise NotImplementedError("Trigger DAC commands are disabled in DAC+matrix+mux profile")
-
-
-def linear_points(start, stop, count):
-    """Return count evenly spaced floats from start to stop (inclusive)."""
-    if count < 2:
-        return [float(start)]
-    step = (stop - start) / float(count - 1)
-    return [float(start + i * step) for i in range(count)]
 
 
 

@@ -273,10 +273,10 @@ int main(void)
     }
     uart1_print("W5500 Ready. Starting Server...\r\n");
 
-    // ========================================================================
-    // 3. MAIN BACKGROUND SERVER LOOP
-    // ========================================================================
+
     while (1) {
+        //matrix_service();
+
         if (uart_cmd_ready) {
             uint16_t frame_len = 0;
 

@@ -9,7 +9,12 @@
 #include "spi.h"
 #include "uart.h"
 
-#define MATRIX_CMD_LEN 5u
+#define MATRIX_PAIRS_INST 11u
+
+#define MATRIX_PAIRS_FLAG_CLEAR_BETWEEN 0x01u
+#define MATRIX_PAIRS_FLAG_CLEAR_AT_END 0x02u
+
+#define MATRIX_PAIRS_HDR_LEN 3u
 #define MUX_CMD_LEN 2u
 #define WRITE_IP_CMD_LEN 7u
 
@@ -22,9 +27,9 @@ typedef struct __attribute__((packed))
 
 typedef struct __attribute__((packed)) {
     uint8_t INST;
-    uint16_t ROW_MASK;
-    uint16_t COL_MASK;
-} MATRIXcommand_t;
+    uint8_t FLAGS;
+    uint8_t PAIR_COUNT;
+} MATRIXpairsHdr_t;
 
 typedef struct __attribute__((packed)) {
     uint8_t INST;
@@ -39,7 +44,7 @@ typedef struct __attribute__((packed)) {
 
 uint8_t parse_command(uint8_t *dptr, uint16_t len);
 int set_voltage(char *args);
-int set_matrix(char *args);
+int set_matrix_pairs(char *args, uint16_t avail_len);
 int set_mux(char *args);
 int writeIP(char *args);
 

@@ -2,6 +2,8 @@
 
 #include "stm32f1xx.h"
 
+static uint8_t g_mux_selected = 0u;
+
 static void mux_all_low(void)
 {
     GPIOC->BSRR = GPIO_BSRR_BR9;
@@ -29,20 +31,31 @@ void mux_init(void)
     GPIOA->CRH |= GPIO_CRH_MODE12;
 
     mux_all_low();
+    g_mux_selected = 0u;
 }
 
 void mux_select(uint8_t mux_id)
 {
     // Enforce one-hot output: selected mux line high, all others low.
     mux_all_low();
+    g_mux_selected = 0u;
 
     if (mux_id == 1u) {
         GPIOC->BSRR = GPIO_BSRR_BS9;
+        g_mux_selected = 1u;
     } else if (mux_id == 2u) {
         GPIOA->BSRR = GPIO_BSRR_BS8;
+        g_mux_selected = 2u;
     } else if (mux_id == 3u) {
         GPIOA->BSRR = GPIO_BSRR_BS11;
+        g_mux_selected = 3u;
     } else if (mux_id == 4u) {
         GPIOA->BSRR = GPIO_BSRR_BS12;
+        g_mux_selected = 4u;
     }
+}
+
+uint8_t mux_get_selected(void)
+{
+    return g_mux_selected;
 }

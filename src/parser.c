@@ -50,11 +50,20 @@ uint8_t parse_command(uint8_t *dptr, uint16_t len)
             continue;
         }
 
-        if (inst == 8u) {
-            if ((uint16_t)(len - pos) < MATRIX_CMD_LEN) {
+        if (inst == MATRIX_PAIRS_INST) {
+            uint16_t remaining = (uint16_t)(len - pos);
+            int consumed;
+
+            if (remaining < MATRIX_PAIRS_HDR_LEN) {
                 break;
             }
-            pos = (uint16_t)(pos + (uint16_t)set_matrix((char *)&dptr[pos]));
+
+            consumed = set_matrix_pairs((char *)&dptr[pos], remaining);
+            if (consumed <= 0) {
+                break;
+            }
+
+            pos = (uint16_t)(pos + (uint16_t)consumed);
             continue;
         }
 
@@ -97,15 +106,64 @@ int set_voltage(char *args)
     return (int)sizeof(*cmd);
 }
 
-int set_matrix(char *args)
+int set_matrix_pairs(char *args, uint16_t avail_len)
 {
-    MATRIXcommand_t *cmd = (MATRIXcommand_t *)args;
-    matrix_apply_masks(cmd->ROW_MASK, cmd->COL_MASK);
+    MATRIXpairsHdr_t *hdr = (MATRIXpairsHdr_t *)args;
+    uint16_t needed_len;
+    uint8_t flags = hdr->FLAGS;
+    uint8_t pair_count = hdr->PAIR_COUNT;
+    uint8_t *pair_data = (uint8_t *)args + MATRIX_PAIRS_HDR_LEN;
+    char prntbuf[80];
 
-    char prntbuf[60];
-    snprintf(prntbuf, sizeof(prntbuf), "reached set_matrix: row_mask=0x%04X, col_mask=0x%04X\r\n", cmd->ROW_MASK, cmd->COL_MASK);
-    uart1_print(prntbuf);
-    return MATRIX_CMD_LEN;
+    needed_len = (uint16_t)(MATRIX_PAIRS_HDR_LEN + ((uint16_t)pair_count * 2u));
+    if (avail_len < needed_len) {
+        return -1;
+    }
+//to be checked ?????
+/*
+    if ((flags & (MATRIX_PAIRS_FLAG_CLEAR_BETWEEN | MATRIX_PAIRS_FLAG_CLEAR_AT_END)) != 0u) {
+        uint8_t idx;
+        matrix_disable_mapping();
+        for (idx = 0u; idx < pair_count; idx++) {
+            uint8_t row = pair_data[(uint16_t)idx * 2u];
+            uint8_t col = pair_data[(uint16_t)idx * 2u + 1u];
+
+
+            if (row < 1u || row > MATRIX_ROW_COUNT || col < 1u || col > MATRIX_COL_COUNT) {
+                continue;
+            }
+
+            matrix_apply_masks((uint16_t)(1u << (row - 1u)), (uint16_t)(1u << (col - 1u)));
+
+            if ((flags & MATRIX_PAIRS_FLAG_CLEAR_BETWEEN) != 0u && idx + 1u < pair_count) {
+                matrix_apply_masks(0u, 0u);
+            }
+        }
+
+        if ((flags & MATRIX_PAIRS_FLAG_CLEAR_AT_END) != 0u) {
+            matrix_apply_masks(0u, 0u);
+        }
+
+        return (int)needed_len;
+    }
+        */
+
+    if (matrix_set_pairs_mapping(pair_data, pair_count) < 0) {
+        snprintf(prntbuf,
+                 sizeof(prntbuf),
+                 "matrix pair map rejected: count=%u\r\n",
+                 (unsigned int)pair_count);
+        uart1_print(prntbuf);
+        matrix_disable_mapping();
+    } else {
+        snprintf(prntbuf,
+                 sizeof(prntbuf),
+                 "matrix pair map set: count=%u\r\n",
+                 (unsigned int)pair_count);
+        uart1_print(prntbuf);
+    }
+
+    return (int)needed_len;
 }
 
 int set_mux(char *args)
