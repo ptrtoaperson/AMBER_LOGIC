@@ -1,0 +1,2 @@
+[console_scripts]
+amber_controller = amber_controller.cli:main
