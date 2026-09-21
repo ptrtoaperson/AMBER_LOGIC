@@ -152,8 +152,8 @@ static json_key_result_t handle_address_enable_keys(cJSON *root)
             return JSON_KEY_ERROR;
         }
 
-        set_enable_lt(en);
         set_address((uint16_t)addr_val);
+        set_enable_lt(en);
         uart1_print("address: applied\r\n");
         return JSON_KEY_OK;
     }

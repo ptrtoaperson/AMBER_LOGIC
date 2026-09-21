@@ -220,8 +220,8 @@ static int cmd_setaddress(int argc, char *argv[])
         return -1;
     }
 
-    set_enable_lt((uint8_t)en_val);
     set_address((uint16_t)address_val);
+    set_enable_lt((uint8_t)en_val);
 
     uart1_print("\r\nAddress applied\r\n");
     return 0;

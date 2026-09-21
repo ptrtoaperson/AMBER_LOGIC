@@ -80,21 +80,22 @@ void SystemInit(void) {
 int main(void)
 {
     X_Clock_Init();
-    uart1_init();
-        i2c_init();
+   
     // Bring DAC SPI/CS up immediately, then force DAC into power-down.
     // so outputs do not sit at POR defaults during early boot delays.
     ltc_spi_init();
     ltc_write_dac_cs(LTC268X_CMD_POWERDOWN_REG, 0xFFFF, LTC_DAC_CS0);
 
   
-
-    uart1_print("Clock test\r\n");
+     uart1_init();
+        i2c_init();
+    //uart1_print("Clock test\r\n");
 
     ExternIntInit();
     ethernet_spi_init();
     matrix_init();
     mux_init();
+    interface_init();
 
     __enable_irq(); // Global interrupt enable
 

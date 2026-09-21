@@ -8,7 +8,7 @@ try:
               "address": 1023,
               "enable": 1,
               "matrix": {
-                  "1": 5,
+                  "2": 5,
               },
               }, 
         timeout=5

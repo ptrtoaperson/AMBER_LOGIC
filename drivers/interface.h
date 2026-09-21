@@ -5,6 +5,7 @@
 #include "parser.h"
 #include "matrix_io.h"
 #include "mux_io.h"
+#include "ltc268x.h"
 
 #define DAC_SIZE    14U
 #define ADDR_SIZE   10U
@@ -27,16 +28,17 @@
 
 
 /* Codes assume a +/-10V bipolar DAC span: 0V=0x8000 (midscale), 5V=0xC000. */
-#define VCC          49152U//5.2f   // convert to code 49152
-#define VSS          32768U//0.0f   //32768
+#define VCC          40960U//49152U//5.2f   // convert to code 49152
+#define VSS          24576U//32768U//0.0f   //32768
 #define SUB          32768U//0.0f   //32768
 
-#define BIT_HIGH    49152U//5.0f    //49152
-#define BIT_LOW     32768U//0.0f    //32768
+#define BIT_HIGH    40960U//49152U//5.0f    //49152
+#define BIT_LOW     24576U//32768U//0.0f    //32768
 
-#define EN_LT       49152U//5.0f    //49152
+#define EN_LT       40960U//49152U//5.0f    //49152
 
 
+void interface_init(void);
 int set_power(uint8_t sw);
 int set_address(uint16_t address);
 int set_enable_lt(uint8_t en);
