@@ -50,15 +50,15 @@ return 0;
 }
 
 int set_enable_lt(uint8_t en){
-    addr_register[EN_LT_POS] = en ? EN_LT:BIT_LOW;
+    addr_register[EN_LT_POS] = en ? EN_LT:SUB;
     apply_addr_register();
     return 0;
 }
 
 int set_power(uint8_t sw){
 
-    addr_register[VCC_POS] = sw ? VCC : VSS;
-    addr_register[SUB_POS] = sw ? SUB : VSS;
+    addr_register[VCC_POS] = sw ? VCC : SUB;
+    addr_register[SUB_POS] = sw ? SUB : SUB;
     addr_register[VSS_POS] = VSS;
 
     apply_addr_register();

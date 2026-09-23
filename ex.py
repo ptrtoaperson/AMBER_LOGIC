@@ -5,10 +5,11 @@ try:
     response = requests.post(
         "http://192.168.1.50:5000/calculate", 
         json={"mux": 4,
-              "address": 1023,
+              "address": 0x3e0,
               "enable": 1,
               "matrix": {
-                  "2": 5,
+                  "1":3,
+                  "2": 1,
               },
               }, 
         timeout=5
