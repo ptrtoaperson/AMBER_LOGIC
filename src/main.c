@@ -16,13 +16,10 @@
 #include "mux_io.h"
 #include "flash.h"
 #include "fact_reset.h"
+#include "shell.h"
+#include "shell_commands.h"
 
 volatile bool thereISpkt = false;
-
-static volatile bool uart_cmd_ready = false;
-static volatile uint16_t uart_rx_len = 0;
-static volatile uint8_t uart_rx_buf[DATA_BUF_SIZE];
-static uint8_t uart_cmd_buf[DATA_BUF_SIZE];
 
 // Factory reset trigger: N NRST presses across boots (cleared on power-cycle).
 #define FACTORY_RESET_THRESHOLD 3u
@@ -36,27 +33,6 @@ static void boot_delay_ms(uint32_t ms)
         for (volatile uint32_t cycles = 0; cycles < 9000; ++cycles) {
             __asm("nop");
         }
-    }
-}
-
-static void uart_rx_command_accumulator(char c)
-{
-    uint8_t byte = (uint8_t)c;
-
-    /* If one full UART frame is waiting, drop incoming bytes until main loop consumes it. */
-    if (uart_cmd_ready) {
-        return;
-    }
-
-    if (uart_rx_len >= (DATA_BUF_SIZE - 1u)) {
-        uart_rx_len = 0;
-        return;
-    }
-
-    uart_rx_buf[uart_rx_len++] = byte;
-
-    if (byte == 'e') {
-        uart_cmd_ready = true;
     }
 }
 
@@ -105,21 +81,23 @@ void SystemInit(void) {
 int main(void)
 {
     X_Clock_Init();
-
+   
     // Bring DAC SPI/CS up immediately, then force DAC into power-down.
     // so outputs do not sit at POR defaults during early boot delays.
     ltc_spi_init();
     ltc_write_dac_cs(LTC268X_CMD_POWERDOWN_REG, 0xFFFF, LTC_DAC_CS0);
 
-    uart1_init();
-    uart1_set_rx_callback(uart_rx_command_accumulator);
-
-    uart1_print("Clock test\r\n");
+  
+     uart1_init();
+        i2c_init();
+    //uart1_print("Clock test\r\n");
 
     ExternIntInit();
     ethernet_spi_init();
     matrix_init();
     mux_init();
+    interface_init();
+    load_saved_levels();
 
     __enable_irq(); // Global interrupt enable
 
@@ -132,7 +110,7 @@ int main(void)
     // Keep channels powered down while loading startup configuration.
     ltc_write_dac_cs(LTC268X_CMD_POWERDOWN_REG, 0xFFFF, LTC_DAC_CS0);
 
-    // Initialize LTC2688 channels to +/-10V span and 0V code.
+    // Initialize LTC2688 channels to +/-10V bipolar span and 0V code.
     // Channel settings are buffered, so issue an explicit channel update
     // after writing both setting and code registers.
     for (uint8_t ch = 0; ch < 16; ch++) {
@@ -147,6 +125,7 @@ int main(void)
     // Power up only after safe code/span preload is complete.
     ltc_write_dac_cs(LTC268X_CMD_POWERDOWN_REG, 0x0000, LTC_DAC_CS0);
     uart1_print("LTC2688 initialized (channels 0-15).\r\n");
+   
 
     // ========================================================================
     // 2. PERIPHERAL GPIO & W5500 ETHERNET SERVER SETUP
@@ -173,7 +152,7 @@ int main(void)
         .dns = {8, 8, 8, 8},
         .dhcp = NETINFO_STATIC};
 
-    i2c_init();
+
     if (eui48_read_mac(netinfo.mac)) {
         char mac_msg[64];
         snprintf(mac_msg,
@@ -215,14 +194,14 @@ int main(void)
     flash_read32(NETCFG_FLASH_ADDR, flash_data, 3u);
 
     char rawcfg[128];
-    snprintf(rawcfg,
+   /* snprintf(rawcfg,
              sizeof(rawcfg),
              "Flash raw cfg: IP_WORD=0x%08lX PORT_WORD=0x%08lX MAGIC=0x%08lX\r\n",
              (unsigned long)flash_data[0],
              (unsigned long)flash_data[1],
              (unsigned long)flash_data[2]);
     uart1_print(rawcfg);
-
+*/
     bool netcfg_valid = (flash_data[2] == NETCFG_MAGIC)
                         && is_valid_ipv4_and_port(flash_data[0], flash_data[1]);
 
@@ -235,11 +214,12 @@ int main(void)
         char netbuf[96];
         snprintf(netbuf,
                  sizeof(netbuf),
-                 "Flash network config: %u.%u.%u.%u\r\n",
+                 "IP address: %u.%u.%u.%u\r\nPort: %u\r\n",
                  netinfo.ip[0],
                  netinfo.ip[1],
                  netinfo.ip[2],
-                 netinfo.ip[3]);
+                 netinfo.ip[3],
+                 (unsigned int)flash_data[1]);
         uart1_print(netbuf);
     } else {
         uart1_print("Flash network config invalid/missing; using defaults\r\n");
@@ -262,8 +242,8 @@ int main(void)
     uint8_t ver = getVERSIONR();
     if (ver != 0x04)
     {
-        uart1_print("FATAL ERROR: W5500 not found via SPI!\r\n");
-        while (1) {
+      //  uart1_print("FATAL ERROR: W5500 not found via SPI!\r\n");
+        for(uint8_t i = 0; i <10; i++) {
             // Rapidly flash the LED if there is a hardware error
             GPIOC->BRR = (1 << 13);  // LED ON
             for (volatile int i = 0; i < 300000; i++);
@@ -271,36 +251,19 @@ int main(void)
             for (volatile int i = 0; i < 300000; i++);
         }
     }
-    uart1_print("W5500 Ready. Starting Server...\r\n");
-
+    else {
+    uart1_print("Starting Server...\r\n");
+    }
+    
+    //stat serial shell
+   // uart1_init();
+    shell_init();
+    uart1_set_rx_callback(shell_input_char);
 
     while (1) {
         //matrix_service();
 
-        if (uart_cmd_ready) {
-            uint16_t frame_len = 0;
-
-            __disable_irq();
-            frame_len = uart_rx_len;
-            if (frame_len > DATA_BUF_SIZE) {
-                frame_len = DATA_BUF_SIZE;
-            }
-            for (uint16_t i = 0; i < frame_len; i++) {
-                uart_cmd_buf[i] = uart_rx_buf[i];
-            }
-            uart_rx_len = 0;
-            uart_cmd_ready = false;
-            __enable_irq();
-
-            if (frame_len > 0) {
-                uart1_print("UART packet processing...\r\n");
-                uint16_t parse_len = frame_len;
-                if (parse_len > 0 && uart_cmd_buf[parse_len - 1] == 'e') {
-                    parse_len--;
-                }
-                parse_command(uart_cmd_buf, parse_len);
-            }
-        }
+        shell_process();
 
         // Check the flag OR check if the pin is physically LOW (PD2)
         if (thereISpkt || !(GPIOD->IDR & (1 << 2))) {

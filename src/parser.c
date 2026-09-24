@@ -9,13 +9,8 @@
 #define NETCFG_FLASH_ADDR 0x08007000u
 #define NETCFG_MAGIC 0x4E455443u /* 'NETC' */
 
-typedef struct {
-    uint8_t local_ch;
-    enum ltc268x_device_id dev_id;
-    ltc_dac_cs_t cs;
-} dac_route_t;
 
-static int map_logical_channel(uint8_t logical_ch, dac_route_t *route)
+ int map_logical_channel(uint8_t logical_ch, dac_route_t *route)
 {
     if (!route) {
         return -1;
@@ -29,6 +24,18 @@ static int map_logical_channel(uint8_t logical_ch, dac_route_t *route)
     }
 
     return -1;
+}
+
+int write_dac_voltage(uint8_t logical_ch, uint16_t code)
+{
+    dac_route_t route;
+
+    if (map_logical_channel(logical_ch, &route) < 0) {
+        return -1;
+    }
+ 
+    ltc_write_dac_cs(LTC268X_CMD_CH_CODE_UPDATE(route.local_ch, route.dev_id), code, route.cs);
+    return 0;
 }
 
 uint8_t parse_command(uint8_t *dptr, uint16_t len)
@@ -93,16 +100,11 @@ uint8_t parse_command(uint8_t *dptr, uint16_t len)
 int set_voltage(char *args)
 {
     Vcommand_t *cmd = (Vcommand_t *)args;
-    dac_route_t route;
     char prntbuf[60];
-    snprintf(prntbuf, sizeof(prntbuf), "reached set_voltage: N_DAC=%u, CODE=0x%04X\r\n", cmd->N_DAC, cmd->CODE);
-    uart1_print(prntbuf);
-    
-    if (map_logical_channel(cmd->N_DAC, &route) < 0) {
-        return (int)sizeof(*cmd);
-    }
+   // snprintf(prntbuf, sizeof(prntbuf), "reached set_voltage: N_DAC=%u, CODE=0x%04X\r\n", cmd->N_DAC, cmd->CODE);
+    //uart1_print(prntbuf);
 
-    ltc_write_dac_cs(LTC268X_CMD_CH_CODE_UPDATE(route.local_ch, route.dev_id), cmd->CODE, route.cs);
+    write_dac_voltage(cmd->N_DAC, cmd->CODE);
     return (int)sizeof(*cmd);
 }
 

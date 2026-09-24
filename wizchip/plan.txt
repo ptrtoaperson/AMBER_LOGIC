@@ -1,0 +1,6 @@
+take pairs from python,like config_matrix([(r1,c1), (r2,c2), (r3,c3),(r4,c4)])
+make  the maxk for r1, r2,r3  if provided if not make the mask of it such that row gpio are off
+make similarly the masks for column. 
+
+if two rows chares same 
+

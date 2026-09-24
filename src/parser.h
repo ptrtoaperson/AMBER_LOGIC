@@ -42,6 +42,14 @@ typedef struct __attribute__((packed)) {
     uint16_t PORT;
 } WriteIPcommand_t;
 
+typedef struct {
+    uint8_t local_ch;
+    enum ltc268x_device_id dev_id;
+    ltc_dac_cs_t cs;
+} dac_route_t;
+
+int map_logical_channel(uint8_t logical_ch, dac_route_t *route);
+int write_dac_voltage(uint8_t logical_ch, uint16_t code);
 uint8_t parse_command(uint8_t *dptr, uint16_t len);
 int set_voltage(char *args);
 int set_matrix_pairs(char *args, uint16_t avail_len);
