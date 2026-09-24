@@ -86,6 +86,12 @@ static json_key_result_t handle_mux_key(cJSON *root)
         return JSON_KEY_ABSENT;
     }
 
+    if (cJSON_IsNull(mux)) {
+        mux_select(0u);
+        uart1_print("mux: disabled\r\n");
+        return JSON_KEY_OK;
+    }
+
     if (cJSON_IsString(mux) && mux->valuestring != NULL) {
         if (strcmp(mux->valuestring, "None") == 0 || strcmp(mux->valuestring, "none") == 0) {
             mux_select(0u);
