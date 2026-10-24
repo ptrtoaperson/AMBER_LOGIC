@@ -253,8 +253,7 @@ int main(void)
     uart1_print("Starting Server...\r\n");
     }
     
-    //stat serial shell
-   // uart1_init();
+
     shell_init();
     uart1_set_rx_callback(shell_input_char);
 

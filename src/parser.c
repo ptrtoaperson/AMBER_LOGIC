@@ -101,9 +101,6 @@ int set_voltage(char *args)
 {
     Vcommand_t *cmd = (Vcommand_t *)args;
     char prntbuf[60];
-   // snprintf(prntbuf, sizeof(prntbuf), "reached set_voltage: N_DAC=%u, CODE=0x%04X\r\n", cmd->N_DAC, cmd->CODE);
-    //uart1_print(prntbuf);
-
     write_dac_voltage(cmd->N_DAC, cmd->CODE);
     return (int)sizeof(*cmd);
 }
@@ -121,34 +118,6 @@ int set_matrix_pairs(char *args, uint16_t avail_len)
     if (avail_len < needed_len) {
         return -1;
     }
-//to be checked ?????
-/*
-    if ((flags & (MATRIX_PAIRS_FLAG_CLEAR_BETWEEN | MATRIX_PAIRS_FLAG_CLEAR_AT_END)) != 0u) {
-        uint8_t idx;
-        matrix_disable_mapping();
-        for (idx = 0u; idx < pair_count; idx++) {
-            uint8_t row = pair_data[(uint16_t)idx * 2u];
-            uint8_t col = pair_data[(uint16_t)idx * 2u + 1u];
-
-
-            if (row < 1u || row > MATRIX_ROW_COUNT || col < 1u || col > MATRIX_COL_COUNT) {
-                continue;
-            }
-
-            matrix_apply_masks((uint16_t)(1u << (row - 1u)), (uint16_t)(1u << (col - 1u)));
-
-            if ((flags & MATRIX_PAIRS_FLAG_CLEAR_BETWEEN) != 0u && idx + 1u < pair_count) {
-                matrix_apply_masks(0u, 0u);
-            }
-        }
-
-        if ((flags & MATRIX_PAIRS_FLAG_CLEAR_AT_END) != 0u) {
-            matrix_apply_masks(0u, 0u);
-        }
-
-        return (int)needed_len;
-    }
-        */
 
     if (matrix_set_pairs_mapping(pair_data, pair_count) < 0) {
         snprintf(prntbuf,

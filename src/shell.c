@@ -111,7 +111,7 @@ void shell_input_char(char c)
 
 void shell_process(void)
 {
-    if (!s_line_ready) {
+    if (!s_line_ready ) {
         return;
     }
 

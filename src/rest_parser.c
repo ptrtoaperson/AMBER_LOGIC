@@ -29,10 +29,11 @@ static void jsonWalker(cJSON *root, int depth) {
 
         // 1. Strings
         if (cJSON_IsString(element)) {
-            snprintf(prntbuf, sizeof(prntbuf), "%skey: %s, value: %s\r\n",
+  /*          snprintf(prntbuf, sizeof(prntbuf), "%skey: %s, value: %s\r\n",
                      indent, key, element->valuestring);
             uart1_print(prntbuf);
-        }
+    */
+       }
         // 2. Numbers (Splits float into int.frac to guarantee nano.specs compatibility)
         else if (cJSON_IsNumber(element)) {
             double val = element->valuedouble;
@@ -40,30 +41,32 @@ static void jsonWalker(cJSON *root, int depth) {
             int frac_part = (int)((val - integer_part) * 100);
             if (frac_part < 0) frac_part = -frac_part;
 
-            snprintf(prntbuf, sizeof(prntbuf), "%skey: %s, value: %d.%02d\r\n",
+  /*          snprintf(prntbuf, sizeof(prntbuf), "%skey: %s, value: %d.%02d\r\n",
                      indent, key, integer_part, frac_part);
             uart1_print(prntbuf);
-        }
+    */
+       }
         // 3. Booleans
         else if (cJSON_IsBool(element)) {
-            snprintf(prntbuf, sizeof(prntbuf), "%skey: %s, value: %s\r\n",
+ /*           snprintf(prntbuf, sizeof(prntbuf), "%skey: %s, value: %s\r\n",
                      indent, key, cJSON_IsTrue(element) ? "true" : "false");
             uart1_print(prntbuf);
-        }
+    */
+       }
         // 4. Sub-Objects (Recursive call)
         else if (cJSON_IsObject(element)) {
-            snprintf(prntbuf, sizeof(prntbuf), "%skey: %s (Object):\r\n", indent, key);
+ /*           snprintf(prntbuf, sizeof(prntbuf), "%skey: %s (Object):\r\n", indent, key);
             uart1_print(prntbuf);
-
+*/
             // Recurse down into child object
             jsonWalker(element, depth + 1);
         }
         // 5. Sub-Arrays (Recursive call)
         else if (cJSON_IsArray(element)) {
-            snprintf(prntbuf, sizeof(prntbuf), "%skey: %s (Array size %d):\r\n",
+/*            snprintf(prntbuf, sizeof(prntbuf), "%skey: %s (Array size %d):\r\n",
                      indent, key, cJSON_GetArraySize(element));
             uart1_print(prntbuf);
-
+*/
             // Recurse down into array elements
             jsonWalker(element, depth + 1);
         }

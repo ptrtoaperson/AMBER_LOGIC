@@ -123,11 +123,11 @@ static void matrix_apply_col_mask(uint16_t col_mask)
 static uint8_t row_1(uint16_t col_bits)
 {       // R1 -> PC1
     uint8_t prntbuf[80];
-    sprintf(prntbuf, "row routine:: row id ->1 , column bits -> %x\r\n",  col_bits);
-        uart1_print(prntbuf);
+   // sprintf(prntbuf, "row routine:: row id ->1 , column bits -> %x\r\n",  col_bits);
+     //   uart1_print(prntbuf);
       GPIOC->BSRR = GPIO_BSRR_BS1; 
         matrix_apply_col_mask(col_bits);
-         _us_delay(50);
+         _us_delay(10);
       GPIOC->BSRR = GPIO_BSRR_BR1; 
     return 0;
 }
@@ -136,11 +136,11 @@ static uint8_t row_2(uint16_t col_bits)
 {
         // R2 -> PC2
     uint8_t prntbuf[80];
-    sprintf(prntbuf, "row routine:: row id ->2 , column bits -> %x\r\n",  col_bits);
-        uart1_print(prntbuf);
+    //sprintf(prntbuf, "row routine:: row id ->2 , column bits -> %x\r\n",  col_bits);
+      //  uart1_print(prntbuf);
             GPIOC->BSRR = GPIO_BSRR_BS2;
         matrix_apply_col_mask(col_bits);
-       _us_delay(50);
+       _us_delay(10);
        GPIOC->BSRR = GPIO_BSRR_BR2;
     return 0;
 }
@@ -149,11 +149,11 @@ static uint8_t row_3(uint16_t col_bits)
 {
                // R3 -> PC3
         uint8_t prntbuf[80];
-    sprintf(prntbuf, "row routine:: row id ->3 , column bits -> %x\r\n",  col_bits);
-        uart1_print(prntbuf);
+   // sprintf(prntbuf, "row routine:: row id ->3 , column bits -> %x\r\n",  col_bits);
+     //   uart1_print(prntbuf);
            GPIOC->BSRR = GPIO_BSRR_BS3;
     matrix_apply_col_mask(col_bits);
-        _us_delay(50);
+        _us_delay(10);
     GPIOC->BSRR = GPIO_BSRR_BR3;
     return 0;
 }
@@ -161,11 +161,11 @@ static uint8_t row_3(uint16_t col_bits)
 static uint8_t row_4(uint16_t col_bits)
 {
         uint8_t prntbuf[80];
-    sprintf(prntbuf, "row routine:: row id ->4 , column bits -> %x\r\n",  col_bits);
-        uart1_print(prntbuf);
+    //sprintf(prntbuf, "row routine:: row id ->4 , column bits -> %x\r\n",  col_bits);
+      //  uart1_print(prntbuf);
           GPIOA->BSRR = GPIO_BSRR_BS1;
     matrix_apply_col_mask(col_bits);
-      _us_delay(50);
+      _us_delay(10);
     GPIOA->BSRR = GPIO_BSRR_BR1;
      return 0;
 }
@@ -267,8 +267,8 @@ void matrix_apply_pairs(
     for (uint8_t i = 0u; i < MATRIX_ROW_COUNT; i++)
     {
 
-        sprintf(prntbuf, "apply routine:: row id -> %d, column bits -> %x\r\n", i, *(col_config + i));
-        uart1_print(prntbuf);
+      //  sprintf(prntbuf, "apply routine:: row id -> %d, column bits -> %x\r\n", i, *(col_config + i));
+       // uart1_print(prntbuf);
 
         (*rowfptr[i])(*(col_config + i));
     }
@@ -314,8 +314,8 @@ int matrix_set_pairs_mapping(const uint8_t *pair_data, uint8_t pair_count)
         // make the index based on the row
         row_idx = (uint8_t)(row - 1u);
         row_container[row_idx] = row_container[row_idx] | (0x1 << (col - 1));
-        sprintf(prntbuf, " row id -> %d, column bits -> %x, col -> %d\r\n", row_idx, row_container[row_idx], col);
-        uart1_print(prntbuf);
+       // sprintf(prntbuf, " row id -> %d, column bits -> %x, col -> %d\r\n", row_idx, row_container[row_idx], col);
+        //uart1_print(prntbuf);
     }
 
     matrix_apply_pairs(row_container);

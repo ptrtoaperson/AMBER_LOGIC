@@ -1,0 +1,12 @@
+/******* Addressing scheme for MEASUREMENT *******/
+
+ADDR_LT[1:0] = 0b00 -->> F1-F2
+ADDR_LT[1:0] = 0b01 -->> F3-F4
+ADDR_LT[1:0] = 0b10 -->> F5-F6
+ADDR_LT[1:0] = 0b11 -->> F7-F8
+
+ADDR_LT[2] = 0b0 -->> Samtec 0
+ADDR_LT[2] = 0b1 -->> Samtec 1
+
+ADDR_LT[
+

@@ -22,8 +22,8 @@
 #define ADDR_10     9U
 #define EN_LT_POS   10U
 #define VCC_POS     11U
-#define SUB_POS     12U
-#define VSS_POS     13U
+#define VSS_POS     12U
+#define SUB_POS     13U
 
 
 
