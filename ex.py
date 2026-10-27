@@ -114,9 +114,9 @@ class RTController:
         if (_DB <0 ) or (_DB > 23) or(_Samtec <0) or  (_Samtec > 3):
             print("valid values: 0<=DB<=23; 0<=Samtec<=3; 0<=Fportpairs<=7")
         _DB = _DB & 0b0000011111
-        _Samtec = _Samtec & 0b0000000011
-        _FportPairs = _FportPairs & 0b0000000111
-        addr = (_DB<<5) | (_Samtec<<3)| _FportPairs
+        _Samtec = _Samtec & 0b0000000111
+        _FportPairs = _FportPairs & 0b0000000011
+        addr = (_DB<<5) | (_Samtec<<2)| _FportPairs
         return addr 
 
     def measure(self,mode= None, Quadrant = None, DB=0,Samtec=0,FportPairs=None):
@@ -180,11 +180,23 @@ class RTController:
 
 ctrl = RTController("http://192.168.1.50:5000/")
 import time
+import json
+from datetime import datetime
+
 count = 0   
 while(True):
-    response = ctrl.measure(mode="config_1",Quadrant=1, DB=1, Samtec = 1, FportPairs= "F5F6")
+    while(True):
+        response = ctrl.measure(mode="config_1",Quadrant=1, DB=1, Samtec = 1, FportPairs= "F5F6")
+        if response['status'] == 'OK':
+             break
+              
+
     #ctrl.diagnostic(mode="config_1",DB=1, Samtec=1,FportPairs="F5F6")
     count = count +1
+    status = response.get("status") if isinstance(response, dict) else None
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    with open("response_log.txt", "a", buffering=1) as log_file:
+        log_file.write(f"{timestamp}, count={count}, status={status}\n")
     
     print(f"count-->{count}" )
     print(f"response :: {response}")
