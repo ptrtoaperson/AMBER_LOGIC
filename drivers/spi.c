@@ -62,7 +62,7 @@ void ethernet_spi_init(void)
     GPIOA->BSRR = GPIO_BSRR_BS15; // CS HIGH (Idle)
 
     // ================= SPI =================
-
+#if 0
     SPI1->CR1 = 0; // Reset configuration
 
     // Set Baud Rate Divider
@@ -75,6 +75,17 @@ void ethernet_spi_init(void)
 
 // 2. Set BR[2:0] to 001 (Divider 4)
 //SPI1->CR1 |= SPI_CR1_BR_0;
+#else
+SPI1->CR1 = 0;
+
+SPI1->CR1 |= SPI_CR1_MSTR;
+SPI1->CR1 |= SPI_CR1_SSM | SPI_CR1_SSI;
+SPI1->CR1 &= ~(SPI_CR1_CPOL | SPI_CR1_CPHA);
+
+SPI1->CR1 &= ~SPI_CR1_BR;
+SPI1->CR1 |= SPI_CR1_BR_0;  // 18 MHz if PCLK2 = 72 MHz
+
+#endif
    
 
     SPI1->CR1 |= SPI_CR1_MSTR;               // Master Mode

@@ -139,8 +139,8 @@ int main(void)
     uint8_t memsize[2][8] = {{2, 2, 2, 2, 2, 2, 2, 2}, {2, 2, 2, 2, 2, 2, 2, 2}};
     (void)memsize; // FIX: Silences unused variable warning cleanly
 
-    // Enable specific interrupt types (RECV for data, CON for connection) grouped safely
-    setSn_IMR(0, (Sn_IR_RECV | Sn_IR_CON));
+    // DISCON/TIMEOUT wake the main loop so a peer close or dead link is cleaned up
+    setSn_IMR(0, (Sn_IR_RECV | Sn_IR_CON | Sn_IR_DISCON | Sn_IR_TIMEOUT));
 
     wiz_NetInfo netinfo = {
         .mac = {0x00, 0x08, 0xDC, 0x11, 0x22, 0x33},

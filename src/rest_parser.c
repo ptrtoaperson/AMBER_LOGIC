@@ -161,9 +161,7 @@ static json_key_result_t handle_address_enable_keys(cJSON *root)
             return JSON_KEY_ERROR;
         }
 
-        set_address((uint16_t)addr_val);
-        set_enable_lt(en);
-        set_power(0x1);
+        set_address_enable_power((uint16_t)addr_val, en, 1u);
         uart1_print("address: applied\r\n");
         return JSON_KEY_OK;
     }
@@ -339,7 +337,7 @@ void rest_parser_http(uint8_t *buf_, uint16_t len, char *http_resp, uint16_t htt
              "HTTP/1.1 200 OK\r\n"
              "Content-Type: application/json\r\n"
              "Content-Length: %u\r\n"
-             "Connection: close\r\n"
+             "Connection: keep-alive\r\n"  // <--- CHANGED FROM "close" to "keep-alive"
              "\r\n"
              "%s",
              (unsigned int)strlen(body), body);

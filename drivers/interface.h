@@ -42,5 +42,6 @@ void interface_init(void);
 int set_power(uint8_t sw);
 int set_address(uint16_t address);
 int set_enable_lt(uint8_t en);
+int set_address_enable_power(uint16_t address, uint8_t en, uint8_t sw);
 
 #endif // INTERFACE_H   

@@ -25,10 +25,7 @@ static void apply_addr_register(void)
 
      
     for (uint8_t i = 0; i < DAC_SIZE; i++) {
-   write_dac_voltage(i, addr_register[i]);
-    // small delay to ensure the DAC has time to process the command
-    for (volatile int j = 0; j < 72000; j++);
-
+        write_dac_voltage(i, addr_register[i]);
     }
 
 //        ltc_write_dac_cs(LTC268X_CMD_CH_CODE(i, LTC2688), addr_register[i], LTC_DAC_CS0);
@@ -38,29 +35,49 @@ static void apply_addr_register(void)
 
 }
 
-int set_address(uint16_t address){
-   
-for(uint8_t i = 0; i<ADDR_SIZE; i++){
-    addr_register[i] = address & ((uint16_t)1 << i) ? BIT_HIGH : BIT_LOW ;
+static void load_address(uint16_t address)
+{
+    for (uint8_t i = 0; i < ADDR_SIZE; i++) {
+        addr_register[i] = address & ((uint16_t)1 << i) ? BIT_HIGH : BIT_LOW;
+    }
 }
 
-apply_addr_register();
+static void load_enable_lt(uint8_t en)
+{
+    addr_register[EN_LT_POS] = en ? EN_LT : SUB;
+}
 
-return 0;
+static void load_power(uint8_t sw)
+{
+    addr_register[VCC_POS] = sw ? VCC : SUB;
+    addr_register[SUB_POS] = SUB;
+    addr_register[VSS_POS] = VSS;
+}
+
+int set_address(uint16_t address){
+    load_address(address);
+    apply_addr_register();
+    return 0;
 }
 
 int set_enable_lt(uint8_t en){
-    addr_register[EN_LT_POS] = en ? EN_LT:SUB;
+    load_enable_lt(en);
     apply_addr_register();
     return 0;
 }
 
 int set_power(uint8_t sw){
-
-    addr_register[VCC_POS] = sw ? VCC : SUB;
-    addr_register[SUB_POS] = sw ? SUB : SUB;
-    addr_register[VSS_POS] = VSS;
-
+    load_power(sw);
     apply_addr_register();
-return 0;    
+    return 0;
+}
+
+/* Loads address, enable and power into addr_register[] and writes all channels once. */
+int set_address_enable_power(uint16_t address, uint8_t en, uint8_t sw)
+{
+    load_address(address);
+    load_enable_lt(en);
+    load_power(sw);
+    apply_addr_register();
+    return 0;
 }

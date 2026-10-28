@@ -8,6 +8,7 @@ class RTController:
 
     def __init__(self,url):
         self.url = url
+        self.session = requests.Session()
      
         self.measurement_configs ={ "config_1"    :   {
             "1" :    3, #V+ ->DMM[2]
@@ -125,7 +126,7 @@ class RTController:
 
         try:
                 # Times out if the server doesn't respond within 5 seconds
-                response = requests.post(
+                response = self.session.post(
                     self.url, 
                     json={"mux": Quadrant,
                           "address": address,#0x3e0,
@@ -152,7 +153,7 @@ class RTController:
         address = self.__validate_address(DB,Samtec,FportPairs)
         try:
                       # Times out if the server doesn't respond within 5 seconds
-                response = requests.post(
+                response = self.session.post(
                     self.url, 
                     json={"mux": Quadrant,
                           "address": address,#0x3e0,
@@ -179,28 +180,32 @@ class RTController:
 
 
 ctrl = RTController("http://192.168.1.50:5000/")
+
 import time
 import json
 from datetime import datetime
+
+
 
 count = 0   
 while(True):
     while(True):
         response = ctrl.measure(mode="config_1",Quadrant=1, DB=1, Samtec = 1, FportPairs= "F5F6")
-        if response['status'] == 'OK':
-             break
+        #time.sleep(1)
+        if response != None and response['status'] == 'OK':
+            break
               
 
     #ctrl.diagnostic(mode="config_1",DB=1, Samtec=1,FportPairs="F5F6")
     count = count +1
     status = response.get("status") if isinstance(response, dict) else None
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
     with open("response_log.txt", "a", buffering=1) as log_file:
         log_file.write(f"{timestamp}, count={count}, status={status}\n")
     
     print(f"count-->{count}" )
     print(f"response :: {response}")
-    if response == 1:
+    if response !=None and response['status'] == 'WRONG COMMAND':
          break
     
 
