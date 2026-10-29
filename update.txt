@@ -1,0 +1,7 @@
+*The ControllerAPI.py has a class RT controller that makes measurement json and diagnostic json
+the json is {'mux': 1, 'address': 38, 'enable': 1, 'matrix': {'1': 3, '2': 5, '3': 1, '4': 7}} where matrix is either measurement or diagnostic
+Now I want to implement that logic into the firmware that directly accepts this post request with json, and instead of matrix, it will be config taking values config_x
+and one more key value, "mode" = "measurement"/"diagnostic",
+
+ {'mux': 1, 'address': 38, 'enable': 1, 'mode':'measurement'/'diagnostic', 'config' : 'config_x', 'FportPairs':'FxFx'}
+ there are 5 configs for measurement and 8 configs for diagnostics. and all FportPairs ahopuld also be in firmware

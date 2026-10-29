@@ -5,8 +5,10 @@
 #include "cJSON.h"
 #include "rest_parser.h"
 #include "interface.h"
+#include "matrix_cfg.h"
 
-#define MATRIX_JSON_MAX_PAIRS 9u
+#define DB_MAX      23
+#define SAMTEC_MAX  3
 
 float dac_volatges[14] = {0};
 // Forward declaration of UART function
@@ -73,175 +75,251 @@ static void jsonWalker(cJSON *root, int depth) {
     }
 }
 
-/* Return value for each key handler: whether the key was present and, if so, whether it applied cleanly. */
+/* Return value for each key parser: whether the key was present and, if so, whether it is valid. */
 typedef enum {
     JSON_KEY_ABSENT = 0,
     JSON_KEY_OK = 1,
     JSON_KEY_ERROR = -1
 } json_key_result_t;
 
-/* "mux": "None"/"none" disables all mux lines, 1-4 selects a mux line. */
-static json_key_result_t handle_mux_key(cJSON *root)
+/* A fully validated request. Nothing touches the hardware until every key has been parsed successfully. */
+typedef struct {
+    uint8_t has_mux;
+    uint8_t mux_id;      /* 0 disables all mux lines */
+    uint8_t has_address;
+    uint16_t address;
+    uint8_t has_enable;
+    uint8_t enable;
+    uint8_t has_config;
+    matrix_mode_t mode;
+    uint8_t config;
+} json_cmd_t;
+
+/* "Quadrant": null/"None"/"none" disables all mux lines, 1-4 selects a mux line. */
+static json_key_result_t parse_mux_key(cJSON *root, json_cmd_t *cmd)
 {
-    cJSON *mux = cJSON_GetObjectItemCaseSensitive(root, "mux");
+    cJSON *mux = cJSON_GetObjectItemCaseSensitive(root, "Quadrant");
 
     if (mux == NULL) {
         return JSON_KEY_ABSENT;
     }
 
+    cmd->has_mux = 1u;
+
     if (cJSON_IsNull(mux)) {
-        mux_select(0u);
-        uart1_print("mux: disabled\r\n");
+        cmd->mux_id = 0u;
         return JSON_KEY_OK;
     }
 
     if (cJSON_IsString(mux) && mux->valuestring != NULL) {
         if (strcmp(mux->valuestring, "None") == 0 || strcmp(mux->valuestring, "none") == 0) {
-            mux_select(0u);
-            uart1_print("mux: disabled\r\n");
+            cmd->mux_id = 0u;
             return JSON_KEY_OK;
         }
-        uart1_print("mux: invalid string value (use \"None\")\r\n");
+        uart1_print("Quadrant: invalid string value (use \"None\")\r\n");
         return JSON_KEY_ERROR;
     }
 
     if (cJSON_IsNumber(mux)) {
         int mux_id = (int)mux->valuedouble;
         if (mux_id >= 1 && mux_id <= 4) {
-            mux_select((uint8_t)mux_id);
-            uart1_print("mux: selected\r\n");
+            cmd->mux_id = (uint8_t)mux_id;
             return JSON_KEY_OK;
         }
-        uart1_print("mux: invalid id (use 1-4 or \"None\")\r\n");
+        uart1_print("Quadrant: invalid id (use 1-4 or \"None\")\r\n");
         return JSON_KEY_ERROR;
     }
 
-    uart1_print("mux: unsupported value type\r\n");
+    uart1_print("Quadrant: unsupported value type\r\n");
     return JSON_KEY_ERROR;
 }
 
-/* "address": integer 0-1023. "enable": 1 (enable) or "-" (disable). */
-static json_key_result_t handle_address_enable_keys(cJSON *root)
+/* "FportPairs": "F1F2"/"F3F4"/"F5F6"/"F7F8" maps to address[1:0] = 0..3. */
+static int parse_fport_pairs(const char *name, uint8_t *bits)
 {
-    cJSON *address = cJSON_GetObjectItemCaseSensitive(root, "address");
-    cJSON *enable = cJSON_GetObjectItemCaseSensitive(root, "enable");
-    uint8_t en = 0u;
+    static const char *const pairs[] = {"F1F2", "F3F4", "F5F6", "F7F8"};
+    uint8_t i;
 
-    if (address == NULL && enable == NULL) {
+    for (i = 0u; i < sizeof(pairs) / sizeof(pairs[0]); i++) {
+        if (strcmp(name, pairs[i]) == 0) {
+            *bits = i;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+/* Reads an integer key that must lie in [0, max]. */
+static int parse_bounded_int(cJSON *item, int max, int *out)
+{
+    int val;
+
+    if (!cJSON_IsNumber(item)) {
+        return -1;
+    }
+    val = (int)item->valuedouble;
+    if (val < 0 || val > max) {
+        return -1;
+    }
+    *out = val;
+    return 0;
+}
+
+/* "DB" (0-23), "Samtec" (0-3) and "FportPairs" are required together and form
+ * address = (DB << 5) | (Samtec << 2) | FportPairs.
+ * "enable": 1 (enable) or "-" (disable). */
+static json_key_result_t parse_address_enable_keys(cJSON *root, json_cmd_t *cmd)
+{
+    cJSON *db = cJSON_GetObjectItemCaseSensitive(root, "DB");
+    cJSON *samtec = cJSON_GetObjectItemCaseSensitive(root, "Samtec");
+    cJSON *fport = cJSON_GetObjectItemCaseSensitive(root, "FportPairs");
+    cJSON *enable = cJSON_GetObjectItemCaseSensitive(root, "enable");
+    int db_val;
+    int samtec_val;
+    uint8_t fport_bits = 0u;
+
+    if (db == NULL && samtec == NULL && fport == NULL && enable == NULL) {
         return JSON_KEY_ABSENT;
     }
 
     if (enable != NULL) {
         if (cJSON_IsNumber(enable) && (int)enable->valuedouble == 1) {
-            en = 1u;
+            cmd->enable = 1u;
         } else if (cJSON_IsString(enable) && enable->valuestring != NULL
                    && strcmp(enable->valuestring, "-") == 0) {
-            en = 0u;
+            cmd->enable = 0u;
         } else {
             uart1_print("enable: invalid value (use 1 or \"-\")\r\n");
             return JSON_KEY_ERROR;
         }
+        cmd->has_enable = 1u;
     }
 
-    if (address == NULL) {
-        set_enable_lt(en);
-        uart1_print("enable: applied\r\n");
+    if (db == NULL && samtec == NULL && fport == NULL) {
         return JSON_KEY_OK;
     }
 
-    if (!cJSON_IsNumber(address)) {
-        uart1_print("address: invalid type (expected integer)\r\n");
+    if (db == NULL || samtec == NULL || fport == NULL) {
+        uart1_print("DB/Samtec/FportPairs: all three are required together\r\n");
         return JSON_KEY_ERROR;
     }
 
-    {
-        int addr_val = (int)address->valuedouble;
-        if (addr_val < 0 || addr_val >= 1024) {
-            uart1_print("address: out of range (0-1023)\r\n");
-            return JSON_KEY_ERROR;
-        }
-
-        set_address_enable_power((uint16_t)addr_val, en, 1u);
-        uart1_print("address: applied\r\n");
-        return JSON_KEY_OK;
+    if (parse_bounded_int(db, DB_MAX, &db_val) != 0) {
+        uart1_print("DB: invalid value (0-23)\r\n");
+        return JSON_KEY_ERROR;
     }
-}
-
-/* "matrix": object of {"row": col, ...} pairs, e.g. {"1": 2, "3": 4}. */
-static json_key_result_t handle_matrix_key(cJSON *root)
-{
-    cJSON *matrix = cJSON_GetObjectItemCaseSensitive(root, "matrix");
-    cJSON *pair = NULL;
-    uint8_t pair_data[2u * MATRIX_JSON_MAX_PAIRS];
-    uint8_t pair_count = 0u;
-
-    if (matrix == NULL) {
-        return JSON_KEY_ABSENT;
+    if (parse_bounded_int(samtec, SAMTEC_MAX, &samtec_val) != 0) {
+        uart1_print("Samtec: invalid value (0-3)\r\n");
+        return JSON_KEY_ERROR;
     }
-
-    if (!cJSON_IsObject(matrix)) {
-        uart1_print("matrix: expected an object of row:col pairs\r\n");
+    if (!cJSON_IsString(fport) || fport->valuestring == NULL
+        || parse_fport_pairs(fport->valuestring, &fport_bits) != 0) {
+        uart1_print("FportPairs: invalid value (use F1F2, F3F4, F5F6 or F7F8)\r\n");
         return JSON_KEY_ERROR;
     }
 
-    cJSON_ArrayForEach(pair, matrix) {
-        char *end;
-        unsigned long row;
-        long col;
-
-        if (pair_count >= MATRIX_JSON_MAX_PAIRS) {
-            uart1_print("matrix: too many pairs, truncating\r\n");
-            break;
-        }
-
-        if (pair->string == NULL || !cJSON_IsNumber(pair)) {
-            uart1_print("matrix: invalid pair entry\r\n");
-            return JSON_KEY_ERROR;
-        }
-
-        row = strtoul(pair->string, &end, 10);
-        if (end == pair->string || *end != '\0' || row > 0xFFu) {
-            uart1_print("matrix: invalid row key\r\n");
-            return JSON_KEY_ERROR;
-        }
-
-        col = (long)pair->valuedouble;
-        if (col < 0 || col > 0xFF) {
-            uart1_print("matrix: invalid column value\r\n");
-            return JSON_KEY_ERROR;
-        }
-
-        pair_data[pair_count * 2u] = (uint8_t)row;
-        pair_data[pair_count * 2u + 1u] = (uint8_t)col;
-        pair_count++;
-    }
-
-    if (pair_count == 0u) {
-        return JSON_KEY_ABSENT;
-    }
-
-    if (matrix_set_pairs_mapping(pair_data, pair_count) != 0) {
-        uart1_print("matrix: mapping rejected (check row/col ranges)\r\n");
-        return JSON_KEY_ERROR;
-    }
-
-    uart1_print("matrix: mapping applied\r\n");
+    cmd->address = (uint16_t)(((uint16_t)db_val << 5) | ((uint16_t)samtec_val << 2) | fport_bits);
+    cmd->has_address = 1u;
     return JSON_KEY_OK;
 }
 
-/* Applies every recognized key and reports overall success; any error or unrecognized payload is "wrong command". */
+/* "mode": "measurement"/"diagnostic" with "config": "config_N" (or the bare number N); both are required together. */
+static json_key_result_t parse_mode_config_keys(cJSON *root, json_cmd_t *cmd)
+{
+    cJSON *mode = cJSON_GetObjectItemCaseSensitive(root, "mode");
+    cJSON *config = cJSON_GetObjectItemCaseSensitive(root, "config");
+    unsigned long cfg_id;
+
+    if (mode == NULL && config == NULL) {
+        return JSON_KEY_ABSENT;
+    }
+
+    if (mode == NULL || config == NULL) {
+        uart1_print("mode/config: both keys are required together\r\n");
+        return JSON_KEY_ERROR;
+    }
+
+    if (!cJSON_IsString(mode) || mode->valuestring == NULL) {
+        uart1_print("mode: expected \"measurement\" or \"diagnostic\"\r\n");
+        return JSON_KEY_ERROR;
+    }
+    if (strcmp(mode->valuestring, "measurement") == 0) {
+        cmd->mode = MATRIX_MODE_MEASUREMENT;
+    } else if (strcmp(mode->valuestring, "diagnostic") == 0) {
+        cmd->mode = MATRIX_MODE_DIAGNOSTIC;
+    } else {
+        uart1_print("mode: invalid value (use \"measurement\" or \"diagnostic\")\r\n");
+        return JSON_KEY_ERROR;
+    }
+
+    if (cJSON_IsString(config) && config->valuestring != NULL
+        && strncmp(config->valuestring, "config_", 7) == 0) {
+        char *end;
+        const char *num = config->valuestring + 7;
+
+        cfg_id = strtoul(num, &end, 10);
+        if (end == num || *end != '\0') {
+            uart1_print("config: invalid format (use \"config_N\")\r\n");
+            return JSON_KEY_ERROR;
+        }
+    } else if (cJSON_IsNumber(config) && config->valuedouble >= 0.0) {
+        cfg_id = (unsigned long)config->valuedouble;
+    } else {
+        uart1_print("config: invalid format (use \"config_N\")\r\n");
+        return JSON_KEY_ERROR;
+    }
+
+    if (cfg_id < 1u || cfg_id > matrix_cfg_count(cmd->mode)) {
+        uart1_print("config: out of range for mode\r\n");
+        return JSON_KEY_ERROR;
+    }
+
+    cmd->config = (uint8_t)cfg_id;
+    cmd->has_config = 1u;
+    return JSON_KEY_OK;
+}
+
+/* Validates every key first and only then drives the hardware, so a bad request changes nothing.
+ * An error or a payload with no recognized key is "wrong command". */
 static int dispatch_json_commands(cJSON *root)
 {
-    json_key_result_t mux_res = handle_mux_key(root);
-    json_key_result_t addr_res = handle_address_enable_keys(root);
-    json_key_result_t matrix_res = handle_matrix_key(root);
+    json_cmd_t cmd;
+    json_key_result_t mux_res;
+    json_key_result_t addr_res;
+    json_key_result_t cfg_res;
 
-    if (mux_res == JSON_KEY_ERROR || addr_res == JSON_KEY_ERROR || matrix_res == JSON_KEY_ERROR) {
+    memset(&cmd, 0, sizeof(cmd));
+    mux_res = parse_mux_key(root, &cmd);
+    addr_res = parse_address_enable_keys(root, &cmd);
+    cfg_res = parse_mode_config_keys(root, &cmd);
+
+    if (mux_res == JSON_KEY_ERROR || addr_res == JSON_KEY_ERROR || cfg_res == JSON_KEY_ERROR) {
         return -1;
     }
 
-    if (mux_res == JSON_KEY_ABSENT && addr_res == JSON_KEY_ABSENT && matrix_res == JSON_KEY_ABSENT) {
+    if (mux_res == JSON_KEY_ABSENT && addr_res == JSON_KEY_ABSENT && cfg_res == JSON_KEY_ABSENT) {
         return -1;
+    }
+
+    if (cmd.has_mux) {
+        mux_select(cmd.mux_id);
+        uart1_print(cmd.mux_id ? "mux: selected\r\n" : "mux: disabled\r\n");
+    }
+
+    if (cmd.has_address) {
+        set_address_enable_power(cmd.address, cmd.enable, 1u);
+        uart1_print("address: applied\r\n");
+    } else if (cmd.has_enable) {
+        set_enable_lt(cmd.enable);
+        uart1_print("enable: applied\r\n");
+    }
+
+    if (cmd.has_config) {
+        if (matrix_apply_config(cmd.mode, cmd.config) != 0) {
+            uart1_print("config: mapping rejected\r\n");
+            return -1;
+        }
+        uart1_print("config: applied\r\n");
     }
 
     return 0;
