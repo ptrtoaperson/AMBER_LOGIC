@@ -17,6 +17,8 @@
 #include "flash.h"
 #include "fact_reset.h"
 #include "shell.h"
+#include "shell_commands.h"
+#include "interface.h"
 
 volatile bool thereISpkt = false;
 
@@ -95,6 +97,7 @@ int main(void)
     ethernet_spi_init();
     matrix_init();
     mux_init();
+    load_saved_levels();
     interface_init();
 
     __enable_irq(); // Global interrupt enable

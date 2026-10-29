@@ -8,4 +8,7 @@
 extern const shell_command_t g_shell_commands[];
 extern const uint32_t g_shell_command_count;
 
+/* Loads BH/BL/EN/VCC/VSS/SUB levels saved in flash, if any. Call before interface_init(). */
+void load_saved_levels(void);
+
 #endif /* SHELL_COMMANDS_H_ */

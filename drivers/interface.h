@@ -27,18 +27,18 @@
 
 
 
-/* Codes assume a +/-10V bipolar DAC span: 0V=0x8000 (midscale), 5V=0xC000. */
-#define VCC          40960U//49152U//5.2f   // convert to code 49152
-#define VSS          24576U//32768U//0.0f   //32768
-#define SUB          32768U//0.0f   //32768
-
-#define BIT_HIGH    40960U//49152U//5.0f    //49152
-#define BIT_LOW     24576U//32768U//0.0f    //32768
-
-#define EN_LT       40960U//49152U//5.0f    //49152
-
+/* Levels are DAC codes for a +/-10V bipolar span: 0V=0x8000 (midscale), 5V=0xC000.
+ * Defaults are defined in interface.c and can be overridden from flash via configlevels. */
+extern uint16_t VCC;
+extern uint16_t VSS;
+extern uint16_t SUB;
+extern uint16_t BIT_HIGH;
+extern uint16_t BIT_LOW;
+extern uint16_t EN_LT;
 
 void interface_init(void);
+/* Recomputes the channel codes from the current levels and writes them to the DAC. */
+void interface_reapply(void);
 int set_power(uint8_t sw);
 int set_address(uint16_t address);
 int set_enable_lt(uint8_t en);

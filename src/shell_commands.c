@@ -11,6 +11,10 @@
 #define NETCFG_FLASH_ADDR 0x08007000u
 #define NETCFG_MAGIC 0x4E455443u /* 'NETC' */
 
+/* Separate flash page from NETCFG_FLASH_ADDR so saving levels never erases the network config. */
+#define LEVELS_FLASH_ADDR 0x08020000u
+#define LEVELS_MAGIC 0x4C56454Cu /* 'LVEL' */
+
 /* Must match the fallback wiz_NetInfo/port set up in main.c. */
 #define DEFAULT_IP0 192u
 #define DEFAULT_IP1 168u
@@ -327,12 +331,163 @@ static int cmd_setmux(int argc, char *argv[])
     return 0;
 }
 
+/* code = ((volts+10)/20)*65536, clamped to a valid 16-bit DAC code (+/-10V bipolar span). */
+static uint16_t volts_to_code(float volts)
+{
+    float scaled = ((volts + 10.0f) / 20.0f) * 65536.0f;
+
+    if (scaled < 0.0f) {
+        scaled = 0.0f;
+    }
+    if (scaled > 65535.0f) {
+        scaled = 65535.0f;
+    }
+
+    return (uint16_t)(scaled + 0.5f);
+}
+
+/* Inverse of volts_to_code(), returned in millivolts (int) since nano.specs printf lacks %f. */
+static int32_t code_to_millivolts(uint16_t code)
+{
+    float volts = ((float)code / 65536.0f) * 20.0f - 10.0f;
+    return (int32_t)(volts * 1000.0f);
+}
+
+void load_saved_levels(void)
+{
+    uint32_t flash_data[7] = {0u, 0u, 0u, 0u, 0u, 0u, 0u};
+
+    flash_read32(LEVELS_FLASH_ADDR, flash_data, 7u);
+
+    if (flash_data[6] != LEVELS_MAGIC) {
+        return;
+    }
+
+    BIT_HIGH = (uint16_t)flash_data[0];
+    BIT_LOW  = (uint16_t)flash_data[1];
+    EN_LT    = (uint16_t)flash_data[2];
+    VCC      = (uint16_t)flash_data[3];
+    VSS      = (uint16_t)flash_data[4];
+    SUB      = (uint16_t)flash_data[5];
+}
+
+static int cmd_configlevels(int argc, char *argv[])
+{
+    int i;
+    bool any_key = false;
+    uint32_t flash_data[7];
+    uint32_t flash_verify[7] = {0u, 0u, 0u, 0u, 0u, 0u, 0u};
+
+    if (argc < 2) {
+        uart1_print("Usage: configlevels BH=<v> BL=<v> EN=<v> VCC=<v> VSS=<v> SUB=<v>\r\n");
+        return -1;
+    }
+
+    for (i = 1; i < argc; i++) {
+        char *eq = strchr(argv[i], '=');
+        char *end;
+        float volts;
+
+        if (eq == NULL) {
+            uart1_print("Invalid argument (expected KEY=value)\r\n");
+            return -1;
+        }
+
+        volts = strtof(eq + 1, &end);
+        if (end == eq + 1 || *end != '\0') {
+            uart1_print("Invalid voltage value\r\n");
+            return -1;
+        }
+
+        if (strncmp(argv[i], "BH=", 3) == 0) {
+            BIT_HIGH = volts_to_code(volts);
+        } else if (strncmp(argv[i], "BL=", 3) == 0) {
+            BIT_LOW = volts_to_code(volts);
+        } else if (strncmp(argv[i], "EN=", 3) == 0) {
+            EN_LT = volts_to_code(volts);
+        } else if (strncmp(argv[i], "VCC=", 4) == 0) {
+            VCC = volts_to_code(volts);
+        } else if (strncmp(argv[i], "VSS=", 4) == 0) {
+            VSS = volts_to_code(volts);
+        } else if (strncmp(argv[i], "SUB=", 4) == 0) {
+            SUB = volts_to_code(volts);
+        } else {
+            uart1_print("Unknown key (use BH, BL, EN, VCC, VSS, SUB)\r\n");
+            return -1;
+        }
+        any_key = true;
+    }
+
+    if (!any_key) {
+        uart1_print("Usage: configlevels BH=<v> BL=<v> EN=<v> VCC=<v> VSS=<v> SUB=<v>\r\n");
+        return -1;
+    }
+
+    flash_data[0] = BIT_HIGH;
+    flash_data[1] = BIT_LOW;
+    flash_data[2] = EN_LT;
+    flash_data[3] = VCC;
+    flash_data[4] = VSS;
+    flash_data[5] = SUB;
+    flash_data[6] = LEVELS_MAGIC;
+
+    flash_write32(LEVELS_FLASH_ADDR, flash_data, 7u);
+    flash_read32(LEVELS_FLASH_ADDR, flash_verify, 7u);
+
+    if (memcmp(flash_data, flash_verify, sizeof(flash_data)) != 0) {
+        uart1_print("\r\nFlash verify FAILED\r\n");
+        return -1;
+    }
+
+    interface_reapply();
+
+    uart1_print("\r\nLevels stored and applied\r\n");
+    return 0;
+}
+
+static int cmd_showlevels(int argc, char *argv[])
+{
+    char buf[192];
+    uint32_t flash_data[7] = {0u, 0u, 0u, 0u, 0u, 0u, 0u};
+    bool saved;
+
+    (void)argc;
+    (void)argv;
+
+    flash_read32(LEVELS_FLASH_ADDR, flash_data, 7u);
+    saved = (flash_data[6] == LEVELS_MAGIC);
+
+    /* Show what is stored in flash when present, otherwise the built-in defaults in use. */
+    if (!saved) {
+        uart1_print("\r\nNo levels saved in flash; using defaults\r\n");
+        flash_data[0] = BIT_HIGH;
+        flash_data[1] = BIT_LOW;
+        flash_data[2] = EN_LT;
+        flash_data[3] = VCC;
+        flash_data[4] = VSS;
+        flash_data[5] = SUB;
+    }
+
+    snprintf(buf, sizeof(buf),
+             "\r\nBH=%ldmV BL=%ldmV EN=%ldmV VCC=%ldmV VSS=%ldmV SUB=%ldmV\r\n",
+             (long)code_to_millivolts((uint16_t)flash_data[0]),
+             (long)code_to_millivolts((uint16_t)flash_data[1]),
+             (long)code_to_millivolts((uint16_t)flash_data[2]),
+             (long)code_to_millivolts((uint16_t)flash_data[3]),
+             (long)code_to_millivolts((uint16_t)flash_data[4]),
+             (long)code_to_millivolts((uint16_t)flash_data[5]));
+    uart1_print(buf);
+    return 0;
+}
+
 const shell_command_t g_shell_commands[] = {
     { "help", cmd_help, "list available commands" },
     { "exit", cmd_exit, "close the shell" },
     { "ping", cmd_ping, "check shell responsiveness" },
     { "net", cmd_net, "show the network settings" },
     { "netcfg", cmd_netcfg, "configure the network settings: netcfg <ip> <port>"},
+    { "configlevels", cmd_configlevels, "configlevels BH=<logic high voltage> BL=<logic low voltage> EN=<enable voltage> VCC=<vcc voltage> VSS=<vss voltage> SUB=<substrate voltage>" },
+    { "showlevels", cmd_showlevels, "show the BH/BL/EN/VCC/VSS/SUB levels stored in flash" },
     { "setaddress", cmd_setaddress, "setaddress <address> <en 0|1>" },
     { "setpower", cmd_setpower, "setpower <on|off>" },
     { "config_matrix", cmd_config_matrix, "config_matrix <row,col> [row,col ...]" },
