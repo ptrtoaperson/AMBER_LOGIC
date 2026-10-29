@@ -69,6 +69,16 @@ static int cmd_help(int argc, char *argv[])
     return 0;
 }
 
+static int cmd_exit(int argc, char *argv[])
+{
+    (void)argc;
+    (void)argv;
+
+    uart1_print("\r\nShell closed. Press Enter or type \"shell\" to reopen.\r\n");
+    shell_exit();
+    return 0;
+}
+
 static int cmd_ping(int argc, char *argv[])
 {
     (void)argc;
@@ -319,6 +329,7 @@ static int cmd_setmux(int argc, char *argv[])
 
 const shell_command_t g_shell_commands[] = {
     { "help", cmd_help, "list available commands" },
+    { "exit", cmd_exit, "close the shell" },
     { "ping", cmd_ping, "check shell responsiveness" },
     { "net", cmd_net, "show the network settings" },
     { "netcfg", cmd_netcfg, "configure the network settings: netcfg <ip> <port>"},

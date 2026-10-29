@@ -15,8 +15,11 @@ typedef struct {
     const char   *help;
 } shell_command_t;
 
-/* Resets the line editor and prints the initial prompt. Commands come from shell_commands.c. */
+/* Resets the shell to its dormant (silent) state. It starts when Enter is pressed or "shell" is typed. */
 void shell_init(void);
+
+/* Leaves the interactive shell and returns to the dormant state. */
+void shell_exit(void);
 
 /* Feeds one received byte into the line editor. Safe to call from a UART rx callback/ISR. */
 void shell_input_char(char c);

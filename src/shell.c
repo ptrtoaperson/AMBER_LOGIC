@@ -21,6 +21,32 @@ const char banner[] =
 static char s_line_buf[SHELL_MAX_LINE_LEN];
 static volatile uint16_t s_line_len = 0;
 static volatile uint8_t s_line_ready = 0;
+static volatile uint8_t s_active = 0;
+static volatile uint8_t s_start_request = 0;
+
+/* While dormant, Enter on an empty line or the word "shell" requests activation. Nothing is echoed. */
+static void shell_dormant_input(char c)
+{
+    if (c == '\r' || c == '\n') {
+        s_line_buf[s_line_len] = '\0';
+        if (s_line_len == 0 || strcmp(s_line_buf, "shell") == 0) {
+            s_start_request = 1;
+        }
+        s_line_len = 0;
+        return;
+    }
+
+    if (c == '\b' || c == 0x7F) {
+        if (s_line_len > 0) {
+            s_line_len--;
+        }
+        return;
+    }
+
+    if (s_line_len < (SHELL_MAX_LINE_LEN - 1u)) {
+        s_line_buf[s_line_len++] = c;
+    }
+}
 
 static uint16_t shell_tokenize(char *line, char *argv[], uint16_t max_args)
 {
@@ -75,13 +101,25 @@ void shell_init(void)
 {
     s_line_len = 0;
     s_line_ready = 0;
+    s_active = 0;
+    s_start_request = 0;
+}
 
-    uart1_print(banner);
-    uart1_print(SHELL_PROMPT);
+void shell_exit(void)
+{
+    s_line_len = 0;
+    s_line_ready = 0;
+    s_start_request = 0;
+    s_active = 0;
 }
 
 void shell_input_char(char c)
 {
+    if (!s_active) {
+        shell_dormant_input(c);
+        return;
+    }
+
     /* Drop input until the pending line has been consumed by shell_process(). */
     if (s_line_ready) {
         return;
@@ -111,7 +149,19 @@ void shell_input_char(char c)
 
 void shell_process(void)
 {
-    if (!s_line_ready ) {
+    if (!s_active) {
+        if (s_start_request) {
+            s_start_request = 0;
+            s_line_len = 0;
+            s_line_ready = 0;
+            s_active = 1;
+            uart1_print(banner);
+            uart1_print(SHELL_PROMPT);
+        }
+        return;
+    }
+
+    if (!s_line_ready) {
         return;
     }
 
@@ -119,5 +169,7 @@ void shell_process(void)
 
     s_line_len = 0;
     s_line_ready = 0;
-    uart1_print(SHELL_PROMPT);
+    if (s_active) {
+        uart1_print(SHELL_PROMPT);
+    }
 }
