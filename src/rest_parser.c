@@ -279,14 +279,44 @@ static json_key_result_t parse_mode_config_keys(cJSON *root, json_cmd_t *cmd)
     return JSON_KEY_OK;
 }
 
+/* Every key the firmware understands; anything else (e.g. the old "mux"/"address"/"matrix") is rejected. */
+static int has_only_known_keys(cJSON *root)
+{
+    static const char *const known[] = {
+        "Quadrant", "DB", "Samtec", "FportPairs", "enable", "mode", "config"
+    };
+    cJSON *item = NULL;
+
+    cJSON_ArrayForEach(item, root) {
+        uint8_t i;
+        uint8_t found = 0u;
+
+        for (i = 0u; item->string != NULL && i < sizeof(known) / sizeof(known[0]); i++) {
+            if (strcmp(item->string, known[i]) == 0) {
+                found = 1u;
+                break;
+            }
+        }
+        if (!found) {
+            uart1_print("unknown key in request\r\n");
+            return 0;
+        }
+    }
+    return 1;
+}
+
 /* Validates every key first and only then drives the hardware, so a bad request changes nothing.
- * An error or a payload with no recognized key is "wrong command". */
+ * An error, an unknown key or a payload with no recognized key is "wrong command". */
 static int dispatch_json_commands(cJSON *root)
 {
     json_cmd_t cmd;
     json_key_result_t mux_res;
     json_key_result_t addr_res;
     json_key_result_t cfg_res;
+
+    if (!has_only_known_keys(root)) {
+        return -1;
+    }
 
     memset(&cmd, 0, sizeof(cmd));
     mux_res = parse_mux_key(root, &cmd);
